@@ -1,0 +1,44 @@
+name: fetch-gold-data
+
+on:
+  schedule:
+    - cron: '10 * * * *'   # 每小时第 10 分触发(源站整点后更新; GitHub 定时可能有几分钟延迟)
+  workflow_dispatch: {}     # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore auth state (item prices)
+        env:
+          AUTH_STATE_JSON: ${{ secrets.AUTH_STATE_JSON }}
+        run: |
+          if [ -n "$AUTH_STATE_JSON" ]; then
+            printf '%s' "$AUTH_STATE_JSON" > auth_state.json
+          else
+            echo "WARN: 未配置 AUTH_STATE_JSON, 本次仅采集金价"
+          fi
+
+      - name: Run fetcher
+        run: python fetcher.py
+
+      - name: Commit data
+        run: |
+          git config user.name "gold-bot"
+          git config user.email "action@users.noreply.github.com"
+          git add data.json items.json price_history.csv item_history.csv
+          if git diff --cached --quiet; then
+            echo "数据无变化, 跳过提交"
+          else
+            git commit -m "data: $(date -u '+%Y-%m-%dT%H:%MZ')"
+            git push
+          fi
