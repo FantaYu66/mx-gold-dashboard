@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冒险岛怀旧服 · 金价看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --canvas: #FAF7F5;
+    --ink: #000000;
+    --ink2: #213547;
+    --ink3: #333333;
+    --muted: #666666;
+    --faint: #999999;
+    --rule: #d8d2cc;
+    --up: #b0413e;
+    --down: #2e6e4e;
+    --sans: "MiSans", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    --serif: "PT Serif", "Songti SC", "Noto Serif SC", "SimSun", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body {
+    background: var(--canvas); color: var(--ink3);
+    font-family: var(--serif);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px) 80px; }
+
+  /* ===== nav ===== */
+  nav {
+    display: flex; align-items: center; gap: 20px;
+    padding: 22px 0; border-bottom: 1px solid var(--ink);
+  }
+  .brand {
+    font-family: var(--sans); font-weight: 700; font-size: 15px;
+    letter-spacing: .25em; color: var(--ink);
+  }
+  nav .meta { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 14px; color: var(--muted); }
+  nav .meta b { color: var(--ink); font-weight: 600; }
+  .seg { display: inline-flex; }
+  .seg button {
+    font-family: var(--serif); font-size: 13px; letter-spacing: .1em;
+    background: none; border: 1px solid var(--ink); color: var(--ink);
+    padding: 5px 14px; cursor: pointer;
+  }
+  .seg button + button { border-left: none; }
+  .seg button.active { background: var(--ink); color: var(--canvas); }
+  .btn-plain {
+    font-family: var(--serif); font-size: 13px; letter-spacing: .1em;
+    background: none; border: none; border-bottom: 1px solid var(--ink);
+    color: var(--ink); cursor: pointer; padding: 0 0 2px;
+  }
+  .btn-plain:hover { opacity: .6; }
+
+  /* ===== hero ===== */
+  .hero { position: relative; padding: 72px 0 40px; overflow: hidden; }
+  .watermark {
+    position: absolute; inset: 0; pointer-events: none; user-select: none;
+    font-family: var(--sans); font-weight: 700;
+    font-size: clamp(90px, 16vw, 190px); letter-spacing: .3em; line-height: 1;
+    color: var(--faint); opacity: .16; white-space: nowrap;
+    top: 50%; transform: translateY(-58%);
+  }
+  .hero h1 {
+    position: relative; font-family: var(--sans);
+    font-size: clamp(40px, 7vw, 84px); font-weight: 700;
+    letter-spacing: .12em; line-height: 1.3; color: var(--ink);
+  }
+  .hero h1 .en { display: block; font-size: clamp(13px, 1.6vw, 17px); letter-spacing: .42em; color: var(--muted); margin-bottom: 18px; font-weight: 500; }
+  .hero .lede { position: relative; margin-top: 26px; max-width: 640px; font-size: 16px; color: var(--ink3); }
+  .hero .lede em { font-style: normal; border-bottom: 1px solid var(--ink); color: var(--ink); }
+
+  /* ===== best line ===== */
+  .best {
+    display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap;
+    border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+    padding: 22px 0; margin: 26px 0 0;
+  }
+  .best .label { font-family: var(--sans); font-size: 12px; letter-spacing: .35em; color: var(--muted); }
+  .best .main { font-size: 22px; color: var(--ink); }
+  .best .main b { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--ink); padding: 0 4px 1px; }
+  .best .note { font-size: 13.5px; color: var(--muted); margin-left: auto; }
+
+  /* ===== table ===== */
+  .section-head {
+    display: flex; align-items: baseline; gap: 16px; margin: 72px 0 8px;
+  }
+  .section-head .no { font-family: var(--sans); font-size: 13px; letter-spacing: .3em; color: var(--faint); }
+  .section-head h2 { font-family: var(--sans); font-size: 24px; font-weight: 700; letter-spacing: .18em; color: var(--ink); }
+  .section-head .hint { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: .18em;
+    color: var(--muted); text-align: right; padding: 12px 12px 10px;
+    border-bottom: 1px solid var(--ink); white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; }
+  tbody td {
+    padding: 16px 12px; text-align: right; font-size: 17px;
+    border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  tbody td:first-child { text-align: left; }
+  tbody tr:hover td { background: rgba(0,0,0,.028); }
+  .idx { font-family: var(--sans); font-size: 13px; color: var(--faint); letter-spacing: .1em; }
+  .srv { font-family: var(--sans); font-weight: 600; font-size: 17px; color: var(--ink); letter-spacing: .06em; }
+  .srv .tag {
+    display: inline-block; font-size: 11px; font-weight: 500; letter-spacing: .2em;
+    border: 1px solid var(--ink); color: var(--ink); padding: 1px 8px 1px 10px; margin-left: 10px; vertical-align: 3px;
+  }
+  td .rate { font-size: 21px; font-weight: 700; color: var(--ink); }
+  td .cur { color: var(--muted); font-size: 13px; margin: 0 2px 0 4px; }
+  .delta { font-size: 14px; font-weight: 600; }
+  .delta.up { color: var(--up); } .delta.down { color: var(--down); } .delta.flat { color: var(--faint); font-weight: 400; }
+  .delta small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+
+  /* ===== chart ===== */
+  .chart-box { position: relative; height: 420px; margin-top: 24px; }
+
+  .err {
+    border-top: 1px solid var(--up); border-bottom: 1px solid var(--up);
+    color: var(--up); padding: 14px 2px; margin: 24px 0 0; font-size: 14.5px; display: none;
+  }
+
+  /* item price cells */
+  .pval { font-size: 18px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .pval small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 1px; }
+  .prmb { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .cell-low .pval::after {
+    content: "最低"; font-family: var(--sans); font-size: 10px; letter-spacing: .15em;
+    color: var(--canvas); background: var(--ink); padding: 1px 6px; margin-left: 8px; vertical-align: 3px;
+  }
+  .item-name { font-family: var(--sans); font-weight: 600; font-size: 15.5px; color: var(--ink); }
+  .item-name a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .item-name a:hover { border-bottom-color: var(--ink); }
+  .combo-gold { font-size: 21px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .combo-gold small { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .combo-tax { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .combo-rmb { font-size: 25px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .combo-rmb small { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .cell-best .combo-rmb::after {
+    content: "到手最多"; font-family: var(--sans); font-size: 10px; letter-spacing: .15em;
+    color: var(--canvas); background: var(--ink); padding: 1px 6px; margin-left: 8px; vertical-align: 3px;
+  }
+  .combo-note-row { border-top: 1px solid var(--ink); }
+
+  footer {
+    margin-top: 90px; padding-top: 18px; border-top: 1px solid var(--ink);
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    font-size: 13px; color: var(--muted);
+  }
+  footer .sig { font-family: var(--sans); letter-spacing: .3em; font-size: 11px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav>
+    <span class="brand">冒险岛 · 金价</span>
+    <span class="meta">
+      <span>更新于 <b id="updated">--</b></span>
+      <span>页面 <span id="countdown">--</span>s 后重读本地数据</span>
+      <span class="seg">
+        <button id="btn-hour" class="active">小时</button>
+        <button id="btn-day">天</button>
+      </span>
+      <button class="btn-plain" id="btn-refresh">立即刷新</button>
+    </span>
+  </nav>
+
+  <div class="hero">
+    <div class="watermark">万金万金万金万金万金万金万金</div>
+    <h1><span class="en">MAPLESTORY CLASSIC — GOLD PRICE</span>实时金价看板</h1>
+    <p class="lede">追踪五个区服的游戏币行情，数据每小时整点更新，来源为 <em>G买卖</em>（经冒险岛怀旧服小册子聚合）。曲线与表格中的核心指标为 <em>1 元可兑换的万金数</em>——数值越高，金币越便宜。</p>
+  </div>
+
+  <div class="best" id="best" style="display:none">
+    <span class="label">当前最划算</span>
+    <span class="main"><span id="best-name">--</span>&nbsp;<b id="best-rate">--</b><span class="cur" style="margin-left:8px">万金 / 元</span></span>
+    <span class="note">同样 1 元，在此区服可换到最多的金币</span>
+  </div>
+
+  <div id="err" class="err"></div>
+
+  <div class="section-head">
+    <span class="no">01</span><h2>区服行情</h2>
+    <span class="hint">按 1 元 = 万金 从高到低 · 涨跌对比 24 小时前</span>
+  </div>
+  <table>
+    <thead>
+      <tr><th>区 服</th><th>1 元 = 万金</th><th>1 万金 = 元</th><th>商品价</th><th>库存</th><th>24H 涨跌</th></tr>
+    </thead>
+    <tbody id="rank"></tbody>
+  </table>
+
+  <div class="section-head">
+    <span class="no">02</span><h2>历史走势</h2>
+    <span class="hint">1 元 ≈ 万金 · 曲线越高金币越便宜</span>
+  </div>
+  <div class="chart-box"><canvas id="chart"></canvas></div>
+
+  <div class="section-head">
+    <span class="no">03</span><h2>道具物价</h2>
+    <span class="hint">各区服拍卖行最低价 · 换算按当前金价</span>
+  </div>
+  <table>
+    <thead id="item-head"></thead>
+    <tbody id="item-rows"></tbody>
+  </table>
+  <p style="font-size:12.5px;color:var(--muted);margin-top:10px" id="item-note"></p>
+
+  <div class="section-head">
+    <span class="no">04</span><h2>三件打包 · 到手价值</h2>
+    <span class="hint">整容券 + 染发卡 + 理发券 各服最低价之和 × 0.95（交易行税）· 按该服当前金价折算</span>
+  </div>
+  <table>
+    <thead id="combo-head"></thead>
+    <tbody id="combo-rows"></tbody>
+  </table>
+
+  <div class="section-head">
+    <span class="no">05</span><h2>各服利润</h2>
+    <span class="hint" id="profit-hint"></span>
+    <span class="seg-group" style="margin-left:auto">
+      <button id="btn-pamount" class="seg active">利润额</button>
+      <button id="btn-ppct" class="seg">利润率</button>
+    </span>
+  </div>
+  <div class="chart-box" style="height:320px"><canvas id="profit-chart"></canvas></div>
+
+  <footer>
+    <span>数据每小时整点采集 · 本地存档 data.json / price_history.csv</span>
+    <span>仅供换金参考</span>
+    <span class="sig">MXDC · GMM SJ</span>
+  </footer>
+</div>
+
+<script>
+const REFRESH_SEC = 300; // 仅重读本地 data.json; 数据源每小时整点更新, 抓取进程对齐整点采集
+const COST = 12.8;       // 三件道具的打包成本(元), 利润 = 到手价 - COST
+let chart = null, mode = 'hour', timer = REFRESH_SEC;
+// 高区分度编辑风配色: 固定分配给各区服 (表格/图例/走势图统一)
+const SERVER_COLORS = { '小白兔': '#111111', '漂漂猪': '#b0413e', '绿水灵': '#3f7d52', '蘑菇仔': '#2b5ea7', '蓝蜗牛': '#c9821b' };
+const SERVER_ORDER = ['蓝蜗牛', '蘑菇仔', '绿水灵', '漂漂猪', '小白兔'];
+function colorFor(name) { return SERVER_COLORS[name] || '#666666'; }
+
+function showErr(msg) {
+  const e = document.getElementById('err');
+  if (msg) { e.textContent = '⚠ ' + msg; e.style.display = 'block'; }
+  else e.style.display = 'none';
+}
+
+function fmtTime(iso) {
+  if (!iso) return '--';
+  return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function deltas24h(data) {
+  const hist = data.history_hour || [];
+  if (!hist.length) return {};
+  const latestT = data.latest && data.latest.collected_at ? +new Date(data.latest.collected_at) : Date.now();
+  const target = latestT - 24 * 3600 * 1000;
+  let ref = null, bestGap = Infinity;
+  for (const p of hist) {
+    const gap = Math.abs(+new Date(p.collected_at) - target);
+    if (gap < bestGap) { bestGap = gap; ref = p; }
+  }
+  if (bestGap > 3 * 3600 * 1000 || !ref) return {};
+  const out = {};
+  for (const it of ref.items || []) out[it.area_name] = it.quote && it.quote.wan_gold_to_yuan;
+  return out;
+}
+
+function deltaHTML(area, now, ref24) {
+  const base = ref24[area];
+  if (!base) return '<span class="delta flat">—</span>';
+  const diff = now - base, pct = diff / base * 100;
+  if (Math.abs(pct) < 0.05) return '<span class="delta flat">持平</span>';
+  const cls = diff > 0 ? 'up' : 'down';
+  const arrow = diff > 0 ? '▲' : '▼';
+  return `<span class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%<small>${base.toFixed(3)} → ${now.toFixed(3)} 元</small></span>`;
+}
+
+function render(data) {
+  const latest = data.latest || {};
+  const items = (latest.items || []).slice()
+    .sort((a, b) => (b.quote.yuan_to_wan_gold || 0) - (a.quote.yuan_to_wan_gold || 0));
+  const ref24 = deltas24h(data);
+
+  document.getElementById('updated').textContent = fmtTime(latest.collected_at);
+
+  if (items.length) {
+    document.getElementById('best').style.display = 'flex';
+    document.getElementById('best-name').textContent = items[0].area_name;
+    document.getElementById('best-rate').textContent = items[0].quote.yuan_to_wan_gold;
+  }
+
+  document.getElementById('rank').innerHTML = items.map((it, i) => {
+    const q = it.quote || {};
+    const c = colorFor(it.area_name);
+    return `<tr>
+      <td><span class="idx">${String(i + 1).padStart(2, '0')}</span>&nbsp;&nbsp;<span class="srv" style="border-left:3px solid ${c};padding-left:10px">${it.area_name}${i === 0 ? '<span class="tag">最划算</span>' : ''}</span></td>
+      <td><span class="rate" style="color:${c === '#111111' ? 'var(--ink)' : c}">${q.yuan_to_wan_gold ?? '--'}</span></td>
+      <td>¥${q.wan_gold_to_yuan ?? '--'}</td>
+      <td>¥${q.price_yuan ?? '--'}</td>
+      <td>${q.stock ?? '-'}</td>
+      <td>${deltaHTML(it.area_name, q.wan_gold_to_yuan, ref24)}</td>
+    </tr>`;
+  }).join('');
+
+  renderChart(data);
+}
+
+function renderChart(data) {
+  const hist = mode === 'hour' ? (data.history_hour || []) : (data.history_day || []);
+  const labels = hist.map(p => {
+    const d = new Date(p.collected_at);
+    return mode === 'hour'
+      ? d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }) + '时'
+      : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  });
+
+  const areas = SERVER_ORDER.filter(s => hist.some(p => (p.items || []).some(it => it.area_name === s)));
+  hist.forEach(p => (p.items || []).forEach(it => {
+    if (!areas.includes(it.area_name)) areas.push(it.area_name);
+  }));
+
+  const datasets = areas.map((name, i) => ({
+    label: name,
+    data: hist.map(p => {
+      const it = (p.items || []).find(x => x.area_name === name);
+      return it ? it.quote.yuan_to_wan_gold : null;
+    }),
+    borderColor: colorFor(name),
+    pointBackgroundColor: colorFor(name),
+    pointBorderColor: '#FAF7F5',
+    pointBorderWidth: 2,
+    pointRadius: mode === 'day' ? 5 : 3.8, pointHoverRadius: 7.5,
+    pointHoverBorderWidth: 2.5,
+    spanGaps: true, borderWidth: 2,
+  }));
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#333333', usePointStyle: true, pointStyleWidth: 12,
+            font: { size: 13, family: "'PT Serif','Songti SC',serif" }, padding: 18,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#FAF7F5', borderColor: '#000000', borderWidth: 1,
+          titleColor: '#000000', bodyColor: '#213547',
+          titleFont: { size: 12 }, bodyFont: { size: 13 }, padding: 12, cornerRadius: 0,
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#666666', maxTicksLimit: 10, font: { size: 12, family: "'PT Serif','Songti SC',serif" } }, grid: { color: 'rgba(0,0,0,.05)' } },
+        y: { ticks: { color: '#666666', font: { size: 12, family: "'PT Serif','Songti SC',serif" } }, grid: { color: 'rgba(0,0,0,.05)' } },
+      },
+    },
+  });
+}
+
+function renderItems(itemsObj) {
+  const head = document.getElementById('item-head');
+  const rows = document.getElementById('item-rows');
+  if (!itemsObj || !itemsObj.items || !itemsObj.items.length) {
+    rows.innerHTML = '<tr><td style="color:var(--muted)">暂无道具数据 — 请确认抓取进程与登录态正常</td></tr>';
+    return;
+  }
+  const byItem = new Map();
+  const servers = [];
+  for (const it of itemsObj.items) {
+    if (!byItem.has(it.item_id)) byItem.set(it.item_id, { id: it.item_id, name: it.item_name, m: {} });
+    const entry = byItem.get(it.item_id);
+    entry.m[it.server_name] = it;
+    if (!servers.includes(it.server_name)) servers.push(it.server_name);
+  }
+  head.innerHTML = '<tr><th>道 具</th>' +
+    servers.map(s => `<th class="server-head" style="--c:${colorFor(s)}">${s}</th>`).join('') + '</tr>';
+
+  rows.innerHTML = [...byItem.values()].map(entry => {
+    const prices = Object.values(entry.m).map(x => x.lowest_price).filter(v => v != null);
+    const min = prices.length ? Math.min(...prices) : null;
+    return '<tr><td><span class="item-name"><a href="https://mxdc.dvg.cn/item_info.php?id=' + entry.id + '" target="_blank">' + entry.name + '</a></span></td>' +
+      servers.map(s => {
+        const d = entry.m[s];
+        if (!d || d.lowest_price == null) return '<td>—</td>';
+        const wan = (d.lowest_price / 10000).toFixed(2);
+        const cls = (min != null && d.lowest_price === min) ? 'cell-low' : '';
+        return `<td class="${cls}"><div class="pval">${wan}<small>万</small></div><div class="prmb">≈ ¥${d.rmb_value ?? '--'}</div></td>`;
+      }).join('') + '</tr>';
+  }).join('');
+
+  const times = [...new Set(itemsObj.items.map(x => x.observed_at).filter(Boolean))];
+  document.getElementById('item-note').textContent =
+    times.length ? ('各区服观察时间：' + times.join(' / ') + ' · 未登录无法采集物价, 登录态失效时抓取窗口会提示重新扫码') : '';
+
+  renderCombo(itemsObj);
+}
+
+function renderCombo(itemsObj) {
+  const head = document.getElementById('combo-head');
+  const rows = document.getElementById('combo-rows');
+  if (!itemsObj || !itemsObj.items || !itemsObj.items.length) {
+    rows.innerHTML = '';
+    head.innerHTML = '';
+    return;
+  }
+  // 按区服聚合: 三件各取该服最低价求和, ×0.95 税后, 按该服金价折算人民币
+  const byServer = new Map();
+  const servers = [];
+  for (const it of itemsObj.items) {
+    if (!byServer.has(it.server_name)) byServer.set(it.server_name, { sum: 0, rate: it.yuan_to_wan_gold, n: 0 });
+    const s = byServer.get(it.server_name);
+    if (it.lowest_price != null) { s.sum += it.lowest_price; s.n++; }
+    if (it.yuan_to_wan_gold) s.rate = it.yuan_to_wan_gold;
+    if (!servers.includes(it.server_name)) servers.push(it.server_name);
+  }
+
+  head.innerHTML = '<tr><th>区 服</th><th>税前合计</th><th>到手(×0.95)</th><th>折合人民币</th></tr>';
+  const calc = servers.map(s => {
+    const d = byServer.get(s);
+    const pre = d.n ? d.sum / 10000 : null;          // 万金
+    const after = pre != null ? pre * 0.95 : null;    // 万金
+    const rmb = (after != null && d.rate) ? after / d.rate : null;
+    return { s, pre, after, rmb, c: colorFor(s) };
+  });
+  const best = Math.max(...calc.map(x => x.rmb ?? -Infinity));
+
+  rows.innerHTML = calc.map(x => {
+    const cls = (x.rmb != null && x.rmb === best) ? 'cell-best' : '';
+    return `<tr class="${cls}">
+      <td><span class="srv" style="--c:${x.c};border-left:3px solid ${x.c};padding-left:10px">${x.s}</span></td>
+      <td>${x.pre != null ? `<span class="combo-gold">${x.pre.toFixed(2)}<small> 万金</small></span>` : '—'}</td>
+      <td>${x.after != null ? `<span class="combo-gold">${x.after.toFixed(2)}<small> 万金</small></span><div class="combo-tax">扣 5% 交易行税</div>` : '—'}</td>
+      <td>${x.rmb != null ? `<div class="combo-rmb" style="color:${x.c === '#111111' ? 'var(--ink)' : x.c}">¥${x.rmb.toFixed(2)}</div><div class="combo-tax">按 1元=${byServer.get(x.s).rate} 万金</div>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  renderProfit(calc);
+}
+
+let profitChart = null, profitMode = 'amount', lastCalc = null;
+function renderProfit(calc) {
+  lastCalc = calc;
+  const usePct = profitMode === 'pct';
+  document.getElementById('profit-hint').textContent = usePct
+    ? `利润率 = (到手价 − 成本 ¥${COST.toFixed(2)}) ÷ 成本 × 100%`
+    : `到手价 − 成本 ¥${COST.toFixed(2)} · 利润为负的区服自动落在零线下方`;
+
+  const data = calc.filter(x => x.rmb != null)
+    .map(x => ({ s: x.s, v: usePct ? (x.rmb - COST) / COST * 100 : x.rmb - COST, c: x.c }))
+    .sort((a, b) => b.v - a.v);
+  if (!data.length) return;
+
+  if (profitChart) profitChart.destroy();
+  profitChart = new Chart(document.getElementById('profit-chart'), {
+    type: 'bar',
+    data: {
+      labels: data.map(x => x.s),
+      datasets: [{
+        data: data.map(x => +x.v.toFixed(2)),
+        backgroundColor: data.map(x => x.c),
+        borderWidth: 0, barPercentage: 0.55, categoryPercentage: 0.8,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#FAF7F5', borderColor: '#000000', borderWidth: 1,
+          titleColor: '#000000', bodyColor: '#213547',
+          titleFont: { size: 12 }, bodyFont: { size: 13 }, padding: 10, cornerRadius: 0,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (usePct) return (v >= 0 ? '利润率 ' : '亏损率 ') + Math.abs(v).toFixed(1) + '%';
+              return (v >= 0 ? '利润 ¥' : '亏损 ¥') + Math.abs(v).toFixed(2);
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#333333', font: { size: 13, family: "'PT Serif','Songti SC',serif" } }, grid: { display: false } },
+        y: {
+          ticks: {
+            color: '#666666', font: { size: 12, family: "'PT Serif','Songti SC',serif" },
+            callback: v => usePct ? v + '%' : '¥' + v,
+          },
+          grid: { color: 'rgba(0,0,0,.08)' },
+        },
+      },
+    },
+  });
+}
+
+document.getElementById('btn-pamount').onclick = e => {
+  if (profitMode === 'amount') return;
+  profitMode = 'amount'; e.target.classList.add('active');
+  document.getElementById('btn-ppct').classList.remove('active');
+  if (lastCalc) renderProfit(lastCalc);
+};
+document.getElementById('btn-ppct').onclick = e => {
+  if (profitMode === 'pct') return;
+  profitMode = 'pct'; e.target.classList.add('active');
+  document.getElementById('btn-pamount').classList.remove('active');
+  if (lastCalc) renderProfit(lastCalc);
+};
+
+async function load(manual) {
+  if (manual) showErr('');
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch('./data.json?v=' + Date.now(), { cache: 'no-store' }),
+      fetch('./items.json?v=' + Date.now(), { cache: 'no-store' }).catch(() => null),
+    ]);
+    if (!r1.ok) throw new Error('读取 data.json 失败 (HTTP ' + r1.status + ')');
+    render(await r1.json());
+    if (r2 && r2.ok) renderItems(await r2.json());
+    showErr('');
+  } catch (e) {
+    showErr(e.message + ' —— 请确认抓取进程在运行（双击桌面「冒险岛金价看板」）');
+  }
+  timer = REFRESH_SEC;
+}
+
+document.getElementById('btn-refresh').onclick = () => load(true);
+document.getElementById('btn-hour').onclick = e => {
+  if (mode === 'hour') return;
+  mode = 'hour'; e.target.classList.add('active');
+  document.getElementById('btn-day').classList.remove('active');
+  fetch('./data.json?v=' + Date.now()).then(r => r.json()).then(renderChart).catch(() => {});
+};
+document.getElementById('btn-day').onclick = e => {
+  if (mode === 'day') return;
+  mode = 'day'; e.target.classList.add('active');
+  document.getElementById('btn-hour').classList.remove('active');
+  fetch('./data.json?v=' + Date.now()).then(r => r.json()).then(renderChart).catch(() => {});
+};
+
+setInterval(() => {
+  timer--;
+  if (timer <= 0) load(false);
+  document.getElementById('countdown').textContent = Math.max(timer, 0);
+}, 1000);
+
+load(false);
+</script>
+</body>
+</html>
