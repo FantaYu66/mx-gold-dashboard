@@ -82,6 +82,16 @@ def fetch_once():
     return obj
 
 
+def csv_last_col(path):
+    """读取 CSV 最后一行的第一列(时间戳), 用于按快照去重"""
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            rows = [r for r in csv.reader(f) if r]
+        return rows[-1][0] if len(rows) > 1 else None
+    except FileNotFoundError:
+        return None
+
+
 def save(obj):
     latest = obj.get("latest", {})
     collected = latest.get("collected_at", "")
@@ -90,22 +100,22 @@ def save(obj):
     with open(DATA_JSON, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False)
 
-    new_rows = False
-    exists = os.path.exists(DATA_CSV)
-    with open(DATA_CSV, "a", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        if not exists:
-            w.writerow(["collected_at", "area", "yuan_to_wan_gold",
-                        "wan_gold_to_yuan", "price_yuan", "stock"])
-        for it in items:
-            q = it.get("quote", {})
-            w.writerow([collected, it.get("area_name", ""),
-                        q.get("yuan_to_wan_gold", ""),
-                        q.get("wan_gold_to_yuan", ""),
-                        q.get("price_yuan", ""),
-                        q.get("stock", "")])
-            new_rows = True
-    return collected, items, new_rows
+    # 去重: 同一小时快照已入库则不重复追加 (云端定时 20 分钟一次, 需要防重)
+    if csv_last_col(DATA_CSV) != collected:
+        exists = os.path.exists(DATA_CSV)
+        with open(DATA_CSV, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            if not exists:
+                w.writerow(["collected_at", "area", "yuan_to_wan_gold",
+                            "wan_gold_to_yuan", "price_yuan", "stock"])
+            for it in items:
+                q = it.get("quote", {})
+                w.writerow([collected, it.get("area_name", ""),
+                            q.get("yuan_to_wan_gold", ""),
+                            q.get("wan_gold_to_yuan", ""),
+                            q.get("price_yuan", ""),
+                            q.get("stock", "")])
+    return collected, items, True
 
 
 def seconds_until_next_fetch(offset_min=2):
@@ -161,25 +171,20 @@ def fetch_items(cookie_header):
 def save_items(items_obj):
     with open(ITEMS_JSON, "w", encoding="utf-8") as f:
         json.dump(items_obj, f, ensure_ascii=False)
+    ts = items_obj["collected_at"]
+    last = csv_last_col(ITEMS_CSV)
+    # 去重: 同一小时内已有入库则跳过 (items.json 仍会更新为最新)
+    if last and ts and last[:13] == ts[:13]:
+        return
     exists = os.path.exists(ITEMS_CSV)
     with open(ITEMS_CSV, "a", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         if not exists:
             w.writerow(["collected_at", "item_id", "item_name", "server",
                         "lowest_price", "rmb_value"])
-        ts = items_obj["collected_at"]
         for it in items_obj["items"]:
             w.writerow([ts, it["item_id"], it["item_name"], it["server_name"],
                         it["lowest_price"], it["rmb_value"]])
-
-
-def bootstrap_auth_from_env():
-    """CI 环境: 从环境变量 AUTH_STATE_JSON 恢复登录态到 auth_state.json"""
-    v = os.environ.get("AUTH_STATE_JSON")
-    if v:
-        with open(AUTH_STATE, "w", encoding="utf-8") as f:
-            f.write(v)
-        print("已从环境变量恢复登录态")
 
 
 def main():
@@ -188,8 +193,6 @@ def main():
     ap.add_argument("--hourly", action="store_true",
                     help="对齐整点抓取: 每小时第 2 分钟各抓一次(数据源每小时整点更新)")
     args = ap.parse_args()
-
-    bootstrap_auth_from_env()
 
     while True:
         cookie_header = auth_cookie_header()
